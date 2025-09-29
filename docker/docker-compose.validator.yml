@@ -1,0 +1,142 @@
+version: '3.8'
+
+services:
+  validator:
+    image: ghcr.io/one-covenant/grail:latest
+    container_name: grail-validator
+    restart: unless-stopped
+    tty: true
+    stdin_open: true
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["mkdir -p /var/log/grail && chmod 755 /var/log/grail && if [ \"$$GRAIL_DEBUG\" = \"true\" ]; then exec uv run grail -vv validate; else exec uv run grail validate; fi"]
+    environment:
+      # Debug configuration
+      - GRAIL_DEBUG=${GRAIL_DEBUG:-false}
+      
+      # Core Bittensor configuration
+      - BT_WALLET_COLD=${BT_WALLET_COLD}
+      - BT_WALLET_HOT=${BT_WALLET_HOT:-default}
+      - NETUID=${NETUID}
+      - BT_NETWORK=${BT_NETWORK}
+      - BT_CHAIN_ENDPOINT=${BT_CHAIN_ENDPOINT}
+      
+      # Model configuration
+      - GRAIL_MODEL_NAME=${GRAIL_MODEL_NAME:-Qwen/Qwen3-4B-Instruct-2507}
+      - GRAIL_MAX_NEW_TOKENS=${GRAIL_MAX_NEW_TOKENS:-1024}
+      - GRAIL_ROLLOUTS_PER_PROBLEM=${GRAIL_ROLLOUTS_PER_PROBLEM:-4}
+      
+      # R2/S3 Object Storage (REQUIRED for validators)
+      - R2_BUCKET_ID=${R2_BUCKET_ID}
+      - R2_ACCOUNT_ID=${R2_ACCOUNT_ID}
+      - R2_WRITE_ACCESS_KEY_ID=${R2_WRITE_ACCESS_KEY_ID}
+      - R2_WRITE_SECRET_ACCESS_KEY=${R2_WRITE_SECRET_ACCESS_KEY}
+      - R2_READ_ACCESS_KEY_ID=${R2_READ_ACCESS_KEY_ID}
+      - R2_READ_SECRET_ACCESS_KEY=${R2_READ_SECRET_ACCESS_KEY}
+      
+      # Monitoring configuration
+      - WANDB_API_KEY=${WANDB_API_KEY}
+      - WANDB_PROJECT=${WANDB_PROJECT}
+      - WANDB_ENTITY=${WANDB_ENTITY}
+      - WANDB_MODE=${WANDB_MODE}
+      - WANDB_TAGS=${WANDB_TAGS}
+      - WANDB_NOTES=${WANDB_NOTES}
+      - WANDB_RESUME=${WANDB_RESUME}
+      - GRAIL_MONITORING_BACKEND=${GRAIL_MONITORING_BACKEND}
+      
+      # Hugging Face configuration
+      - HF_TOKEN=${HF_TOKEN}
+      - HF_USERNAME=${HF_USERNAME}
+      - HF_HOME=/root/.cache/huggingface
+      
+      # Performance tuning
+      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+      - TRANSFORMERS_NO_ADVISORY_WARNINGS=1
+      - GRAIL_METRIC_BUFFER_SIZE=${GRAIL_METRIC_BUFFER_SIZE}
+      - GRAIL_METRIC_FLUSH_INTERVAL=${GRAIL_METRIC_FLUSH_INTERVAL}
+      
+      # Logging configuration
+      - PROMTAIL_ENABLE=${PROMTAIL_ENABLE:-true}
+      - GRAIL_LOG_FILE=${GRAIL_LOG_FILE:-/var/log/grail/grail.log}
+      - GRAIL_LOG_MAX_SIZE=${GRAIL_LOG_MAX_SIZE:-100MB}
+      - GRAIL_LOG_BACKUP_COUNT=${GRAIL_LOG_BACKUP_COUNT:-5}
+
+    volumes:
+      # Persistent storage for wallet and cache
+      - ${HOME}/.bittensor:/root/.bittensor
+      - validator-cache:/root/.cache
+      - validator-data:/app/data
+      - validator-logs:/var/log/grail
+      
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    
+    networks:
+      - grail-network
+    
+    # Health check to ensure validator is running
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "grail validate"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    
+    # Labels for Watchtower
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+      - "com.centurylinklabs.watchtower.stop-signal=SIGTERM"
+      - "com.centurylinklabs.watchtower.timeout=120s"
+
+  watchtower:
+    image: containrrr/watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --interval 30 --cleanup --label-enable
+    restart: unless-stopped
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_LABEL_ENABLE=true
+      - WATCHTOWER_INCLUDE_RESTARTING=true
+
+  promtail:
+    image: grafana/promtail:latest
+    container_name: grail-promtail
+    restart: unless-stopped
+    command: ["-config.file=/etc/promtail/promtail.yml", "-config.expand-env=true"]
+    environment:
+      - PROMTAIL_LOKI_URL=${PROMTAIL_LOKI_URL:-http://loki:3100/loki/api/v1/push}
+      - PROMTAIL_JOB=${PROMTAIL_JOB:-grail}
+      - GRAIL_ENV=${GRAIL_ENV:-prod}
+      - BT_NETWORK=${BT_NETWORK}
+      - NETUID=${NETUID}
+      - BT_WALLET_COLD=${BT_WALLET_COLD}
+      - BT_WALLET_HOT=${BT_WALLET_HOT:-default}
+    volumes:
+      - promtail-positions:/var/lib/promtail
+      - validator-logs:/var/log/grail:ro
+      - ./docker/promtail.yml:/etc/promtail/promtail.yml:ro
+    depends_on:
+      - validator
+    networks:
+      - grail-network
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+networks:
+  grail-network:
+    driver: bridge
+
+volumes:
+  validator-cache:
+    driver: local
+  validator-data:
+    driver: local
+  validator-logs:
+    driver: local
+  promtail-positions:
+    driver: local

@@ -1,0 +1,217 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "grail"
+dynamic = ["version"]
+description = "GRAIL – Guaranteed Rollout Authenticity via Inference Ledger"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "unconst"},
+    {name = "distriburedstatemachine"},
+]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+requires-python = ">=3.9"
+dependencies = [
+    "torch>=2.4.1",
+    "numpy>=1.20.0",
+    "transformers>=4.55.0",
+    "matplotlib>=3.5.0",
+    "safetensors>=0.3.0",
+    "python-dotenv>=0.19.0",
+    "aiobotocore>=2.0.0",
+    "botocore>=1.24.0",
+    "bittensor==9.10.1",
+    "trl>=0.7.0",
+    "accelerate>=0.20.0",
+    "pydantic>=2.3,<3.0.0",
+    "requests>=2.28.0",
+    "huggingface-hub>=0.20.0",
+    "datasets>=2.14.0",
+    "typer==0.16.1",
+    "rich==14.1.0",
+    "wandb>=0.21.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=22.0.0",
+    "flake8>=5.0.0",
+    "mypy>=1.0.0",
+    "pre-commit>=2.20.0",
+    "bittensor-cli>=9.10.2",
+    "zstandard>=0.21.0",  # Optional: better compression than gzip
+]
+experiments = [
+    "jupyter>=1.0.0",
+    "notebook>=6.4.0",
+    "seaborn>=0.11.0",
+]
+all = [
+    "grail[dev]",
+]
+
+[project.scripts]
+grail = "grail.cli:main"
+
+[project.urls]
+Repository = "https://github.com/one-covenant/grail"
+Documentation = "https://github.com/one-covenant/grail/blob/main/SPEC.md"
+Issues = "https://github.com/one-covenant/grail/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["grail"]
+
+[tool.hatch.version]
+path = "grail/__init__.py"
+
+[tool.black]
+line-length = 100
+target-version = ['py39', 'py310', 'py311']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = [
+    # External libs commonly present at runtime but not in type-check env
+    "bittensor",
+    "bittensor.*",
+    "torch",
+    "transformers",
+    "datasets",
+    "huggingface_hub",
+    "aiobotocore",
+    "aiobotocore.*",
+    "botocore",
+    "botocore.*",
+    "safetensors",
+    "safetensors.*",
+    "rich",
+    "rich.*",
+    "typer",
+    "dotenv",
+    "wandb",
+    "requests",
+    "trl.*",
+    "accelerate.*",
+    "vllm.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--verbose",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+]
+
+[tool.coverage.run]
+source = ["grail"]
+omit = [
+    "*/tests/*",
+    "*/experiments/*",
+    "*/__pycache__/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+] 
+
+[tool.flake8]
+max-line-length = 100
+extend-ignore = ["E203", "W503"]
+max-complexity = 12
+
+[dependency-groups]
+dev = [
+    "flake8==7.3.0",
+    "ruff>=0.8.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "B",  # flake8-bugbear
+    "C4", # flake8-comprehensions
+    "UP", # pyupgrade
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+    "B008",  # do not perform function calls in argument defaults
+    "C901",  # too complex
+    "W191",  # indentation contains tabs
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
