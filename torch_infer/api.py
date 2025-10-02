@@ -1,6 +1,7 @@
 import asyncio
 from fastapi import FastAPI
 from typing import Optional
+import numpy as np
 try:
     # Preferred when running as a package (uvicorn torch_infer.api:app)
     from .model_pool import ModelPool
@@ -48,7 +49,7 @@ def shutdown_pool():
 class Req(pydantic.BaseModel):
     prompt_length: int
     all_token_ids: list[int]
-    r_vec: list[float]
+    r_vec: list[int]
 
 
 @app.post("/score")
@@ -58,13 +59,14 @@ async def score(req: Req):
     It converts r_vec to a torch tensor (CPU) and submits the job. The model
     pool threads will move tensors to the GPU as needed.
     """
-    r_tensor = torch.tensor(req.r_vec)
+    r_vec_np = np.asarray(req.r_vec, dtype=np.int8)
+    r_tensor = torch.from_numpy(r_vec_np)
     # submit returns a concurrent.futures.Future
     fut = pool.submit(req.prompt_length, req.all_token_ids, r_tensor)
     # convert to awaitable
-    s_vals, all_logprobs = await asyncio.wrap_future(fut)
+    commitments, all_logprobs = await asyncio.wrap_future(fut)
     return {
-        "s_vals": s_vals,
+        "commitments": commitments,
         "all_logprobs": all_logprobs  
     }
 # pm2 start "uvicorn torch_infer.api:app --host 0.0.0.0 --port 8001 --workers 1" --name torch_infer_server
